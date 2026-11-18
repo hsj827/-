@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>adkit · 缺陷检测复核台</title>
+<style>
+:root{
+  --bg:#0f1216; --panel:#161b22; --panel2:#1c232d; --line:#2a333f;
+  --fg:#d7dee8; --dim:#8494a8; --accent:#4aa3ff;
+  --good:#2ea043; --ng:#e5534b; --warn:#d29922;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.5px}
+.chip{font-size:12px;padding:3px 9px;border:1px solid var(--line);border-radius:20px;color:var(--dim);background:var(--panel2);white-space:nowrap}
+.chip b{color:var(--fg);font-weight:600}
+.chip.ok b{color:var(--good)} .chip.bad b{color:var(--ng)}
+button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 13px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent);color:#fff}
+button.primary{background:#134a86;border-color:#1f6fd0;color:#fff}
+button.good{background:#14421f;border-color:#2ea043}
+button.ng{background:#4a1a18;border-color:#e5534b}
+button:disabled{opacity:.45;cursor:not-allowed}
+main{display:grid;grid-template-columns:290px 1fr 360px;gap:12px;padding:12px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card>h2{margin:0;padding:9px 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);border-bottom:1px solid var(--line);background:var(--panel2)}
+.body{padding:10px 12px}
+#list{max-height:calc(100vh - 130px);overflow:auto}
+.row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-bottom:1px solid #202733;cursor:pointer;font-size:12px}
+.row:hover{background:#1d2530}
+.row.sel{background:#1b3a5c}
+.row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.badge{font-size:10px;padding:1px 6px;border-radius:3px;font-weight:700}
+.badge.ng{background:#5c1a17;color:#ff8b84} .badge.good{background:#14421f;color:#57d970}
+.badge.todo{background:#243040;color:#8fa6c0}
+.badge.err{background:#3a2e12;color:#e0b341}
+.sc{font-variant-numeric:tabular-nums;color:var(--dim);min-width:44px;text-align:right}
+.tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel2)}
+.tabs button{padding:4px 11px;font-size:12px}
+.tabs button.on{background:#134a86;border-color:#1f6fd0;color:#fff}
+#stage{display:flex;align-items:center;justify-content:center;min-height:440px;background:#0a0d11;padding:10px}
+#stage img{max-width:100%;max-height:560px;image-rendering:auto}
+#stage.empty{color:var(--dim);font-size:13px}
+/* Four panels side by side: the single-image view hid which frame you were looking at,
+   and a box that is correct in one frame looks wrong in another. */
+#stage.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start;padding:8px}
+#stage.grid .cell{border:1px solid var(--line);border-radius:6px;background:#0c1015;cursor:zoom-in}
+#stage.grid .cell.sel{border-color:#1f6fd0}
+#stage.grid .cell .cap{display:flex;justify-content:space-between;gap:8px;padding:4px 7px;
+  font-size:11px;color:var(--dim);border-bottom:1px solid var(--line)}
+#stage.grid .cell .cap b{color:var(--fg);font-size:12px}
+#stage.grid .cell img{display:block;width:100%;max-height:300px;object-fit:contain;
+  margin:0;image-rendering:auto}
+.bar{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
+.bar .lb{width:78px;color:var(--dim)}
+.bar .track{flex:1;height:9px;background:#0c1015;border:1px solid var(--line);border-radius:5px;position:relative;overflow:hidden}
+.bar .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#2f7bd6,#63c2ff)}
+.bar .fill.hot{background:linear-gradient(90deg,#b3413a,#ff7a70)}
+.bar .cut{position:absolute;top:-3px;bottom:-3px;width:2px;background:#fff;opacity:.85}
+.bar .vv{width:52px;text-align:right;font-variant-numeric:tabular-nums}
+.defect{display:flex;gap:9px;padding:8px 0;border-bottom:1px solid #202733;align-items:flex-start}
+.defect img{width:76px;height:76px;border:1px solid var(--line);border-radius:4px;object-fit:contain;background:#000}
+.defect .meta{flex:1;font-size:12px}
+.defect .meta span{color:var(--dim)}
+.tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:11px;font-weight:700;margin-bottom:3px}
+.tag.crack{background:#5c1a17;color:#ff8b84} .tag.stain{background:#4a2a55;color:#d9a6ec}
+.tag.missing{background:#5a3d12;color:#f0be6a}
+.review{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.review select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:12px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+label.small{font-size:11px;color:var(--dim);display:block;margin-bottom:3px}
+#log{font-family:Consolas,monospace;font-size:11px;max-height:150px;overflow:auto;padding:8px 10px;background:#0a0d11;border-top:1px solid var(--line);white-space:pre-wrap;color:#9fb0c4}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+.hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
+.warnbox{font-size:12px;color:#f0be6a;background:#2a2110;border:1px solid #6a5320;border-radius:6px;padding:7px 9px;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th,td{text-align:left;padding:3px 5px;border-bottom:1px solid #202733;color:var(--dim)}
+td.v{color:var(--fg);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<header>
+  <h1>adkit 缺陷检测复核台</h1>
+  <span class="chip" id="c-torch">torch <b>…</b></span>
+  <span class="chip" id="c-det">检测器 <b>…</b></span>
+  <span class="chip" id="c-data">良品 <b>…</b> / 不良 <b>…</b></span>
+  <span class="chip" id="c-view">视角 <b>…</b></span>
+  <span style="flex:1"></span>
+  <button id="b-prep">① 分拣 prepare</button>
+  <button id="b-fit" class="primary">② 建模 fit</button>
+  <button id="b-sweep">③ 全量扫描</button>
+  <button id="b-update" title="用当前 good/ng 重建模型；锚点集不达标就不发布">④ 回流更新</button>
+</header>
+
+<main>
+  <div class="card">
+    <h2>图片 · <span id="img-count">0</span> 张</h2>
+    <div class="body" style="padding:8px 10px">
+      <div style="display:flex;gap:6px">
+        <input id="src" value="image" style="flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font-size:12px">
+        <button id="b-browse" style="white-space:nowrap">选择目录</button>
+      </div>
+      <div class="hint" id="dir-hint">当前目录：<code>image</code></div>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:50;align-items:center;justify-content:center">
+    <div class="card" style="width:640px;max-height:78vh;display:flex;flex-direction:column">
+      <h2>选择图片目录 <span style="float:right;cursor:pointer" id="m-close">✕</span></h2>
+      <div class="body" style="border-bottom:1px solid var(--line)">
+        <div style="font-size:12px;color:var(--dim);word-break:break-all" id="m-path">…</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button id="m-up">↑ 上一级</button>
+          <button id="m-pick" class="primary">选用这个目录</button>
+          <span class="chip" id="m-count">图片 0</span>
+        </div>
+      </div>
+      <div id="m-list" style="overflow:auto;flex:1"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <button data-v="grid" class="on">四联对比</button>
+      <button data-v="original">原图</button>
+      <button data-v="canonical">规范化</button>
+      <button data-v="overlay">热图</button>
+      <button data-v="boxes">缺陷框</button>
+      <span style="flex:1"></span>
+      <span class="chip" id="c-file">未选择</span>
+    </div>
+    <div id="stage" class="empty">选一张图，或先做「③ 全量扫描」</div>
+    <div id="stage-cap" class="hint" style="margin-top:6px"></div>
+    <div id="log"></div>
+  </div>
+
+  <div class="card">
+    <h2>判定</h2>
+    <div class="body">
+      <div class="grid2" style="margin-bottom:10px">
+        <div>图像分数<div style="font-size:22px;font-weight:700" id="d-score">–</div></div>
+        <div>结论<div style="font-size:22px;font-weight:700" id="d-verdict">–</div></div>
+      </div>
+      <label class="small">判定线 image_margin：<b id="m-val">1.15</b>（各检测器良品最高分的倍数）</label>
+      <input type="range" id="margin" min="0.6" max="4" step="0.05" value="1.15">
+      <div class="hint">拖动即时重判左侧全部图片，不用重新建模 —— 用来找过检/漏检的平衡点。</div>
+      <h2 style="margin:14px -12px 8px;padding:8px 12px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel2)">各检测器（相对良品极限）</h2>
+      <div id="bars"></div>
+      <div id="align"></div>
+      <div id="gate"></div>
+      <div id="versions"></div>
+    </div>
+  </div>
+</main>
+
+<div style="padding:0 12px 14px">
+  <div class="card">
+    <h2>缺陷明细 · <span id="def-count">0</span> 处 &nbsp;|&nbsp; 人工复核回流</h2>
+    <div class="body">
+      <div id="defects" style="max-height:320px;overflow:auto"></div>
+      <div class="review">
+        <button class="good" id="b-good">归入良品</button>
+        <button class="ng" id="b-ng">归入不良品</button>
+        <select id="kind"><option value="crack">类型:裂纹</option><option value="stain">类型:脏污</option><option value="missing">类型:缺失</option><option value="unsorted">类型:未分</option></select>
+        <input id="rview" list="rviewlist" placeholder="视角/产品名，可新填"
+               style="width:150px;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:6px 8px;font-size:12px">
+        <datalist id="rviewlist"></datalist>
+        <span class="chip" id="c-review">未选图</span>
+      </div>
+      <div class="hint">复核是<b>复制</b>到 <code>data/&lt;view&gt;/good|ng/&lt;type&gt;/</code>，原图不动。视角框里<b>直接输入新产品名</b>就会开一个新数据集，归入若干良品后点 ② 建模。攒够良品后重新 fit 即可生效。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const S={rows:[],sel:null,margin:1.15,view:null,views:{},pixelCut:1.5};
+const $=q=>document.querySelector(q);
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function log(t){const e=$('#log');e.textContent=(t+'\n'+e.textContent).slice(0,6000);}
+async function api(p,b){const r=await fetch(p,b?{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}:{});
+  const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.status); return j;}
+
+function applyView(name){
+  // The chosen view drives which thresholds are displayed. An unmodelled name is legitimate
+  // - that is a product being onboarded - so it must not silently inherit another view's cut.
+  const s=S.status||{}; S.view=name||null;
+  const v=(s.views||{})[name];
+  if(v){
+    $('#margin').value=v.image_margin; S.margin=+v.image_margin;
+    $('#m-val').textContent=S.margin.toFixed(2); S.pixelCut=v.pixel_cut;
+  } else {
+    S.pixelCut=s.pixel_cut_floor||1.5;
+  }
+}
+
+async function refreshStatus(){
+  const s=await api('/api/status');
+  $('#c-torch').innerHTML='torch <b>'+(s.torch.available?s.torch.version+(s.torch.cuda?'+cuda':''):'不可用')+'</b>';
+  $('#c-torch').className='chip '+(s.torch.available?'ok':'bad');
+  $('#c-det').innerHTML='检测器 <b>'+s.detectors.join(' · ')+'</b>';
+  let g=0,n=0; Object.values(s.dataset).forEach(d=>{g+=d.good;n+=d.ng});
+  $('#c-data').innerHTML='良品 <b>'+g+'</b> / 不良 <b>'+n+'</b>';
+  const fitted=Object.keys(s.views); S.views=s.views; S.status=s;
+  $('#c-view').innerHTML='已建模视角 <b>'+(fitted.join(' · ')||'无')+'</b>';
+  // Candidates, not a closed list: directories that exist but have no images yet are real
+  // views too, and a name nobody has typed before is allowed - that is how a new product is
+  // onboarded without leaving the browser.
+  const names=(s.view_names||[]).slice();
+  fitted.forEach(v=>{if(!names.includes(v))names.push(v)});
+  $('#rviewlist').innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
+  const box=$('#rview');
+  if(!box.value)box.value=names[0]||'';
+  applyView(box.value);
+  if(s.align&&Object.keys(s.align).length){
+    $('#align').innerHTML=Object.entries(s.align).map(([v,a])=>{
+      const bad=a.filter(x=>x<0.9).length;
+      return '<div class="'+(bad?'warnbox':'hint')+'">视角 '+esc(v)+' 对齐度：最差 '+Math.min(...a).toFixed(3)+
+             (bad?'，有 '+bad+' 张对不上 —— 这些大概率是另一个面，必须拆出去':'，全部达标')+'</div>';}).join('');
+  } else $('#align').innerHTML='';
+  const gated=Object.entries(s.views).filter(([,v])=>v.gate&&v.gate.n_good);
+  if(gated.length){
+    $('#gate').innerHTML=gated.map(([name,v])=>{
+      const g=v.gate, blind=!g.ng_known;
+      // 锚点误判是在模型自己训过的图上数的，任何 fit 都是 0，没有信息量；
+      // holdout 才是这批阈值没见过的那张零件会被判 NG 的概率。
+      const hold=(g.holdout_n? (' · 样本外误判 <b>'+(g.holdout_fa||0)+'/'+g.holdout_n+'</b>'+
+                (g.holdout_by&&Object.keys(g.holdout_by).length?
+                  '（'+Object.entries(g.holdout_by).map(([k,n])=>k+'×'+n).join(' ')+'）' : '') ): '');
+      return '<div class="hint">版本 <b>'+esc(v.version||'?')+'</b> · 视角 '+esc(name)+
+             ' · 像素线 <b>'+v.pixel_cut.toFixed(2)+'</b> / 面积线 <b>'+(v.extent_cut||0).toFixed(4)+'</b>（由这 '+g.n_good+' 张良品标定）'+
+             ' · 锚点误判 '+g.false_alarms+'/'+g.n_good+hold+
+             ' · 已知不良检出 '+(blind?'<span style="color:#f0be6a">无不良样本，门控形同虚设</span>':(g.ng_caught+'/'+g.ng_known))+
+             '</div>';}).join('');
+  } else $('#gate').innerHTML='<div class="hint">尚未建模，没有可校验的锚点版本。</div>';
+}
+
+function verdictOf(r){return r.error?null:(Math.max(...Object.values(r.per_detector||{x:0}))>=S.margin);}
+function renderList(){
+  $('#img-count').textContent=S.rows.length;
+  $('#list').innerHTML=S.rows.map((r,i)=>{
+    const state=r.error?'err':(r.scored?(verdictOf(r)?'ng':'good'):'todo');
+    const text=r.error?'ERR':(r.scored?(verdictOf(r)?'NG':'GOOD'):'未扫');
+    const sc=r.error?'—':(r.scored?r.image_score.toFixed(2):'—');
+    return '<div class="row'+(i===S.sel?' sel':'')+'" data-i="'+i+'">'+
+      '<span class="badge '+state+'">'+text+'</span>'+
+      '<span class="nm" title="'+esc(r.url||r.path||'')+'">'+esc(r.name||((r.url||r.path||'').split(/[\\/]/).pop()))+'</span>'+
+      '<span class="sc">'+sc+'</span></div>';}).join('');
+  document.querySelectorAll('.row').forEach(e=>e.onclick=()=>select(+e.dataset.i));
+}
+
+async function loadImages(src){
+  $('#dir-hint').innerHTML='当前目录：<code>'+esc(src)+'</code>';
+  try{
+    const d=await api('/api/images?src='+encodeURIComponent(src));
+    S.rows=d.items.map(x=>({url:x.path,name:x.name,scored:false}));
+    S.sel=null; renderList();
+    $('#stage').className='empty';$('#stage').textContent='共 '+d.count+' 张，点一张看详情，或「③ 全量扫描」打分';
+    log('已列出 '+d.count+' 张：'+src);
+  }catch(e){S.rows=[];renderList();log('列目录失败: '+e.message);}
+}
+
+async function select(i){
+  S.sel=i; renderList();
+  const r=S.rows[i];
+  $('#c-file').textContent=(r.url||r.path||'').split(/[\\/]/).pop();
+  if(r.error){$('#stage').className='empty';$('#stage').textContent='失败：'+r.error;return;}
+  if(!r.artifacts){                       // list rows carry no scores until scored
+    $('#stage').className='empty';$('#stage').textContent='检测并渲染中…';
+    try{Object.assign(r,await api('/api/predict',{path:r.url})); r.scored=true;}
+    catch(e){$('#stage').textContent='失败：'+e.message;return;}
+    renderList();
+  }
+  const a=r.artifacts||{}; a.token=r.token;
+  showView($('#stage').dataset.v||'grid',a);
+  const pd=r.per_detector||{};
+  $('#d-score').textContent=r.image_score.toFixed(3);
+  const ng=verdictOf(r);
+  $('#d-verdict').textContent=ng?'不良品':'良品';
+  $('#d-verdict').style.color=ng?'var(--ng)':'var(--good)';
+  const refs=S.views[r.view]&&S.views[r.view].per_detector||{};
+  $('#bars').innerHTML=Object.entries(pd).map(([k,v])=>{
+    const w=Math.min(100,v/4*100), hot=v>=S.margin;
+    return '<div class="bar"><span class="lb">'+esc(k)+'</span><span class="track">'+
+      '<span class="fill'+(hot?' hot':'')+'" style="width:'+w+'%"></span>'+
+      '<span class="cut" style="left:'+(S.margin/4*100)+'%"></span></span>'+
+      '<span class="vv">'+v.toFixed(2)+'</span></div>';}).join('')||'<div class="hint">无</div>';
+  const ds=r.defects||[];
+  $('#def-count').textContent=ds.length;
+  const crops={}; (a.crops||[]).forEach(c=>crops[c.index]=c);
+  const note=ds.length?(ng?'<div class="hint">以下区域<b>超过像素判定线</b>，且图像分数已过判定线 → 判为不良：</div>'+
+    '<div class="hint" style="color:#f0be6a">像素线 pixel_cut='+S.pixelCut+'×良品极限 · 图像线 margin='+S.margin.toFixed(2)+'</div>'
+    :'<div class="warnbox">下面 '+ds.length+' 处只是<b>像素级候选</b>：局部超过了良品极限的 '+S.pixelCut+' 倍，'+
+      '但整图分数 '+r.image_score.toFixed(3)+' 没到判定线 '+S.margin.toFixed(2)+'，所以仍判良品。'+
+      '把上面的滑杆往左拉就会升级为不良品。</div>'):'';
+  $('#defects').innerHTML=note+(ds.map((d,i)=>{const c=crops[i];
+    return '<div class="defect">'+(c?'<img src="'+c.url+'">':'<div style="width:76px;height:76px;border:1px solid var(--line);border-radius:4px"></div>')+
+      '<div class="meta"><span class="tag '+esc(d.label)+'">'+esc(d.label)+'</span><div>'+
+      '置信 <b>'+d.score.toFixed(3)+'</b> · 面积 '+Math.round(d.area)+'px</div><div>'+
+      '细长比 '+d.elongation+' · 最长 '+d.max_dim+'px</div><div>'+
+      '框 ['+d.bbox.join(', ')+'] · 来源 '+(d.sources||[]).join(',')+'</div></div></div>';}).join('')
+      ||'<div class="hint">这张图没有检出缺陷区域。</div>');
+  $('#c-review').textContent=(r.view||'?')+' · '+((r.url||'').split(/[\\/]/).pop());
+}
+
+// Order matters: the three panels drawn on the photo come first, and the one that is NOT the
+// photo is last and labelled as such. A reviewer comparing a box against what they saw on the
+// line needs to know which frame each picture is in, and one image at a time hides that.
+const PANELS=[['original','原图','相机拍到的样子'],
+              ['overlay','热图','异常度叠在原图上'],
+              ['boxes','缺陷框','框与黄线都在原图坐标'],
+              ['canonical','规范化','模型看到的朝向，可能被旋转过']];
+
+function showView(v,a){
+  const st=$('#stage'), cap=$('#stage-cap');
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  st.dataset.v=v;
+  if(v==='grid'){
+    const have=PANELS.filter(p=>a[p[0]]);
+    if(!have.length){st.className='empty';st.textContent='该图还没有渲染产物，先 predict';
+      if(cap)cap.innerHTML='';return;}
+    st.className='grid';
+    st.innerHTML=have.map(p=>'<div class="cell" data-v="'+p[0]+'"><div class="cap"><b>'+
+      p[1]+'</b><span>'+p[2]+'</span></div><img src="'+a[p[0]]+'?v='+(a.token||'')+
+      '"></div>').join('');
+    st.querySelectorAll('.cell').forEach(c=>c.onclick=()=>showView(c.dataset.v,a));
+    if(cap)cap.innerHTML='点任一格可放大单看。<b>缺陷框/热图与原图同坐标</b>；'
+      + '「规范化」是模型实际看到的画面，朝向可能与原图不同。';
+    return;
+  }
+  const u=a[v];
+  if(!u){st.className='empty';st.textContent='该图还没有渲染产物，先 predict';
+    if(cap)cap.innerHTML='';return;}
+  st.className='';st.innerHTML='<img src="'+u+'?v='+(a.token||'')+'">';
+  if(cap)cap.innerHTML=v==='canonical'
+    ? '这一页是<b>规范化画面</b>（模型实际看到的朝向），零件可能被旋转过——判断框位对不对请看「缺陷框」页。'
+    : (v==='boxes' ? '热区与框都画在<b>原图</b>上，黄色轮廓是模型声称的缺陷边界。' : '');
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  const r=S.rows[S.sel];
+  if(r&&r.artifacts){const a=r.artifacts; a.token=r.token; showView(b.dataset.v,a);}});
+
+$('#margin').oninput=e=>{S.margin=+e.target.value;$('#m-val').textContent=S.margin.toFixed(2);
+  if(S.sel!=null)select(S.sel); renderList();};
+
+$('#b-prep').onclick=async()=>{
+  $('#b-prep').disabled=true; log('prepare 中…');
+  try{const r=await api('/api/prepare',{src:$('#src').value});
+    log('prepare: '+r.usable+'/'+r.total+' 可用，视角 '+r.views.join('/')+'，被拒 '+r.rejected.length);
+    const by={}; r.rows.forEach(x=>{(by[x.view]=by[x.view]||[]).push(x)});
+    $('#stage').className='';$('#stage').innerHTML='<div style="max-height:520px;overflow:auto;width:100%">'+
+      Object.entries(by).map(([v,rows])=>'<h3 style="font-size:13px;margin:10px 0 4px">'+esc(v)+' · '+rows.length+' 张</h3>'+
+      '<table><tr><th>文件</th><th>aspect</th><th>面积比</th><th>fill</th><th>均值</th><th>边缘密度</th></tr>'+
+      rows.map(x=>'<tr><td>'+esc(x.file.slice(-16))+'</td><td class="v">'+x.bbox_aspect+'</td><td class="v">'+x.area_ratio+
+      '</td><td class="v">'+x.fill+'</td><td class="v">'+x.mean+'</td><td class="v">'+x.edge_density+'</td></tr>').join('')+'</table>').join('')+'</div>';
+    await refreshStatus();
+  }catch(e){log('prepare 失败: '+e.message);} finally{$('#b-prep').disabled=false;}
+};
+
+$('#b-fit').onclick=async()=>{
+  $('#b-fit').disabled=true; log('fit 中…（首次会下载骨干权重，可能几分钟）');
+  try{const r=await api('/api/fit',{detectors:null});
+    log('fit 完成：'+Object.keys(r.views).join(', '));
+    r.warnings.forEach(w=>log('  警告 '+w));
+    (r.notes||[]).forEach(w=>log('  样本外校验 '+w));
+    await refreshStatus(); renderList();
+  }catch(e){log('fit 失败: '+e.message);} finally{$('#b-fit').disabled=false;}
+};
+
+$('#b-update').onclick=async()=>{
+  $('#b-update').disabled=true; log('回流更新中…（先构建候选版本，通过锚点门控才发布）');
+  try{
+    const r=await api('/api/update',{detectors:null});
+    r.accepted.forEach(a=>log('  已发布 视角 '+a.view+'：良品 '+a.n_good+
+      '，锚点误判 '+a.gate.false_alarms+'，已知不良 '+a.gate.ng_caught+'/'+a.gate.ng_paths.length));
+    r.rejected.forEach(x=>log('  拒绝更新 视角 '+x.view+'：'+x.reason+' —— 保留原版本'));
+    r.warnings.forEach(w=>log('  警告 '+w));
+    (r.notes||[]).forEach(w=>log('  样本外校验 '+w));
+    await refreshStatus(); await showVersions(); renderList();
+  }catch(e){log('更新失败: '+e.message);} finally{$('#b-update').disabled=false;}
+};
+
+async function showVersions(){
+  const v=await api('/api/versions');
+  const parts=[];
+  Object.entries(v.views).forEach(([name,o])=>{
+    if(o.versions.length<2) return;
+    parts.push('<div class="hint">'+esc(name)+' 历史：'+o.versions.map(z=>
+      '<button class="rb" data-view="'+esc(name)+'" data-version="'+esc(z.version)+'">'+
+      esc(z.version)+(z.current?' ●':'')+'</button>').join(' ')+
+      '（● = 当前，点其他版本即回滚）</div>');
+  });
+  $('#versions').innerHTML=parts.join('');
+}
+
+$('#versions').addEventListener('click',async ev=>{
+  const b=ev.target.closest('button.rb'); if(!b) return;
+  try{
+    const r=await api('/api/rollback',{view:b.dataset.view,version:b.dataset.version});
+    log('已回滚 '+r.view+' -> '+r.current);
+    await refreshStatus(); await showVersions(); renderList();
+  }catch(e){log('回滚失败: '+e.message);}
+});
+
+$('#b-sweep').onclick=async()=>{
+  $('#b-sweep').disabled=true; log('扫描中…');
+  try{const r=await api('/api/sweep',{src:$('#src').value,limit:200});
+    S.rows=r.rows.map(x=>({...x,scored:!x.error})); S.sel=null; log('扫描完成：'+r.count+' 张，判不良 '+r.ng+' 张');
+    renderList(); if(S.rows.length)select(0);
+  }catch(e){log('扫描失败: '+e.message);} finally{$('#b-sweep').disabled=false;}
+};
+
+async function review(decision){
+  const r=S.rows[S.sel]; if(!r||r.error){log('先选一张能解码的图');return;}
+  const view=($('#rview').value||'').trim()||r.view||'default';
+  if(!(S.status&&S.status.views&&S.status.views[view]))
+    log('  新建视角 '+view+'（还没有模型，归入后点 ② 建模 才会生效）');
+  const body={path:r.url,decision,view,kind:decision==='ng'?$('#kind').value:null};
+  try{const res=await api('/api/review',body); log('已复制 → '+res.copied_to); await refreshStatus();}
+  catch(e){log('复核失败: '+e.message);}
+}
+$('#rview').addEventListener('change',e=>applyView(e.target.value.trim()));
+$('#b-good').onclick=()=>review('good');
+$('#b-ng').onclick=()=>review('ng');
+
+$('#src').onchange=e=>loadImages(e.target.value.trim());
+
+let MB={path:null,parent:null};
+async function browse(path){
+  try{
+    const d=await api('/api/browse?path='+encodeURIComponent(path));
+    MB=d;
+    $('#m-path').textContent=d.path;
+    $('#m-count').textContent='本层图片 '+d.image_count;
+    $('#m-pick').disabled=d.image_count===0;
+    const up=d.at_root?'':'<div class="row" data-p="'+esc(d.parent)+'"><span style="color:var(--dim)">↑</span>'+
+      '<span class="nm" style="direction:ltr;color:var(--dim)">..（上一级）</span></div>';
+    $('#m-list').innerHTML=up+d.dirs.map(x=>
+      '<div class="row" data-p="'+esc(x.ref)+'"><span style="color:var(--accent)">▸</span>'+
+      '<span class="nm" style="direction:ltr">'+esc(x.name)+'</span></div>').join('')
+      +(d.dirs.length?'':'<div class="hint" style="padding:10px">这个目录下没有子目录。'+
+        (d.image_count?'它本身有 '+d.image_count+' 张图 —— 直接点「选用这个目录」。':'它里面也没有图片，换一层看看。')+'</div>');
+    if(d.truncated) $('#m-list').innerHTML+='<div class="hint">子目录过多已截断，只显示前 '+d.dirs.length+' 个。</div>';
+    document.querySelectorAll('#m-list .row').forEach(e=>e.onclick=()=>browse(e.dataset.p));
+  }catch(e){log('浏览失败: '+e.message);}
+}
+$('#b-browse').onclick=async()=>{
+  $('#modal').style.display='flex';
+  await browse('.');                       // start at the project root, not a leaf folder
+};
+$('#m-close').onclick=()=>$('#modal').style.display='none';
+$('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').style.display='none';};
+$('#m-up').onclick=()=>{if(MB.parent)browse(MB.parent);};
+$('#m-pick').onclick=()=>{
+  const p=MB.path; $('#src').value=p; $('#modal').style.display='none'; loadImages(p);
+};
+
+refreshStatus().then(()=>{log('就绪。流程：① 分拣看视角 → 把图归入 good/ng → ② 建模 → ③ 全量扫描 → ④ 有新确认就回流更新。');
+  showVersions().catch(()=>{});
+  loadImages($('#src').value.trim()||'.');});
+</script>
+</body>
+</html>

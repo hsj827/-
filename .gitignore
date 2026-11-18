@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.log
+.DS_Store
+
+# Product imagery, fitted models and vendored tooling stay out of the repository.
+# data/    per-view good/ng libraries of the real part (confidential imagery)
+# runs/    fitted bundles, versioned models, render artifacts (derived, hundreds of MB)
+# image/   image1/   raw captures from the line
+# bottle/  MVTec-AD style benchmark set, CC BY-NC-SA: local validation only
+# _tools/  vendored uv / VC++ redist payloads
+/data/
+/runs/
+/image/
+/image1/
+/bottle/
+/_tools/

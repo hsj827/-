@@ -1,0 +1,190 @@
+paths:
+  data: data
+  runs: runs
+
+ui:
+  # 目录选择器能浏览的起点；"." 表示项目根
+  roots: ["."]
+  # 本机工具默认可以从盘符开始选任意文件夹。
+  # 若要把服务暴露到局域网（serve --host 0.0.0.0），务必改成 false
+  allow_system_drives: true
+  max_entries: 400
+
+preprocess:
+  background: auto
+  roi:
+    # auto: 有定位模板就用模板匹配，否则退回全局阈值。
+    # template 强制模板匹配（peak 太低会直接报错），otsu 强制只用阈值
+    method: auto
+    # edges: 模板尺寸由零件自身边缘范围决定（换产品不会失配）
+    # fixed: 用画面中心的固定比例裁块，只对尺寸固定的单一产品安全
+    template_source: edges
+    template_crop: 0.26     # template_source=fixed 时的比例，也用于挑选代表图
+    search_reach: 0.8       # 只在画面中心这个比例范围内找边缘
+    edge_percentile: 99.0
+    edge_dilate: 15
+    crop_margin: 0.12
+    window_slack: 0.5       # 二次轮廓细化窗口相对模板的外扩比例
+    # 锚点是 medoid 估计，抽样即可：全量两两匹配在 209 张上要 4.3 万次模板搜索，
+    # 而把每张原图和梯度图都留在内存里是 1.35 GB，产线盒子上直接分配失败
+    anchor_candidates: 0      # 参与竞争锚点的帧数上限；0 = 全部（每张只多一次梯度图）
+    anchor_comparators: 32    # 每帧最多与多少帧比较
+    anchor_scale: 1.0         # 粗筛投票用的比例。0.5 试过：它会让粗筛换人，而换出来的人
+                              # 配准更差，209 张良品上直接少检 9 个已知缺陷
+    anchor_refine: 10         # 进入第二阶段实测配准的候选数
+    anchor_probe_images: 48   # 第二阶段每个候选用多少张良品量配准中位数
+    # 固定参考帧的文件名（空=自动搜索）。两次建模要能归因，或运维想让参考帧在加料前后
+    # 保持一致时才填；填了以后仍然会实测这张图的配准质量
+    anchor_image: ""
+    min_peak: 0.35          # 匹配相关度低于此视为没找到零件
+    max_area_ratio: 0.5     # 阈值法轮廓超过整图这个占比，基本是抓到了背景
+    min_area_ratio: 0.0002
+    margin_ratio: 0.10
+    close_kernel: 5
+  canonical:
+    size: [256, 256]
+    long_side_horizontal: true
+    flip_resolve: template
+    # below this outline ratio minAreaRect cannot tell the two axes apart,
+    # so the content (not the geometry) picks the quarter-turn
+    elongated_aspect: 1.15
+    # 朝向只比"丝印带"：参考图与它自己的候选 turn 旋转作差，非零处就是会随零件转的
+    # 像素（文字、极性标记）；罐体轮廓和画布里的背景光晕转不转都一样，对朝向没有信息。
+    band_blur: 2.0
+    # 权重再限制在零件轮廓向内缩这比例以内的区域，把轮廓和框进来的背景一并排除
+    band_inset: 0.10
+    # 最优 turn 与次优 turn 的带内加权差值小于此值 => 朝向不可判定，明确报出而非猜一个
+    ambiguous_margin: 0.02
+  register:
+    method: phase_correlation
+    max_shift: 16
+  alignment:
+    # 良品之间的 ncc 上限由相机重复性决定，不是模型问题；低于此值报"成像极限"
+    min_ncc: 0.90
+    # 只有比良品分布中位数低出这么多才算"另一种面"，零点几的抖动是摆放不是混料
+    min_gap: 0.15
+  # 梯度形状模型只管"零件在哪"，不管"零件朝哪"
+  shape:
+    angles: [0, 90, 180, 270]
+    # 定包围盒用的分位：太低会把暗角算进来使模板胖过零件，太高只剩零星几点
+    edge_percentile: 99.5
+    crop_margin: 0.08
+    # 形状点 = 模板梯度高于"本帧 edge_percentile 分位"的像素，与查询侧同一把尺子
+    min_points: 24
+    # 边缘拟合取窗口内这个分位以上的点当零件轮廓；用整帧分位的话，背景一大半的图里
+    # 这个分位落在噪声上，拟合出来的是随机斑点
+    fit_percentile: 99.0
+    # 形状点重合比例。同一批真图上良品落在 0.20-1.00，零件换了位置会掉到 0.1 以下，
+    # 所以门限只需卡在两者之间；框得对不对由 part_rect_from_edges 的尺寸校验把关
+    min_peak: 0.15
+  view:
+    assignment: manual
+    default: top
+    auto:
+      fallback: unknown
+      rules:
+        - id: side
+          aspect_gt: 1.2
+        - id: face
+          aspect_lt: 0.83
+  annotation:
+    strip: true
+    reject_area_ratio: 0.02
+
+detectors:
+  patchcore:
+    enabled: true
+    backbone: resnet18
+    layers: [layer2, layer3]
+    proj_dim: 128
+    proj_seed: 0
+    pool: 3
+    grid: [32, 32]
+    k: 9
+    coreset_ratio: 0.15
+    # bank 行数上限。每张图的开销与 bank 大小成正比（在 bank 里选 top-k，不是点积），
+    # 只按 coreset_ratio 会随良品数量线性变胖：209 张时长到 20000 行，单张 kNN 215ms
+    max_memory: 6000
+    # FPS 的候选池大小；超过它先随机取池再在池上做 FPS（不再是随机抽样当 coreset）
+    coreset_candidates: 8000
+    # kNN 分块的 patch 数：产线盒子内存紧张时整块矩阵会直接分配失败
+    knn_block: 256
+  stefann:
+    enabled: true
+    backbone: resnet18
+    layers: [layer2, layer3]
+    grid: [16, 16]
+    proj_dim: 64
+    pca_dim: 24
+    shrinkage: 0.3
+  crack:
+    enabled: true
+    # dark: 暗线（本体裂纹）  bright: 亮线（盖板上划痕）  both: 取局部更强的一侧
+    polarity: both
+    sigmas: [1.0, 2.0, 3.0]
+    min_area: 10
+    max_area: 3000
+    min_elongation: 4.0
+    score_percentile: 99.0
+    # 配准抖动幅度（画布像素）。用它把"纯位移能产生的线响应"测出来当噪声底：
+    # 盖板焊道本身就是一排短线，良品之间互比看不出它是假裂纹源，因为它们抖得一致
+    jitter_px: 2
+    # 噪声图的中位数下限比例，防止平滑区把 z 放大到失真
+    floor_ratio: 0.5
+    # 留一法测出"样本外尾部比样本内厚多少"之后再乘的安全系数；
+    # 单靠良品自身的 p99 定 cut 会让每一张新良品越线（真图实测 4/4 误判）
+    cut_margin: 1.15
+  missing:
+    enabled: true
+    tolerance: 3
+    min_area: 60
+  stain:
+    enabled: true
+    window: 15
+    z: 4.0
+    min_area: 20
+
+fusion:
+  method: max
+  # 像素级判定线，单位是「良品第 pixel_percentile 百分位像素的多少倍」。
+  # 必须 > 1.0：等于 1.0 时按定义就有 0.1% 的良品像素会冒出来，每张良品都会误报缺陷
+  pixel_cut: 1.5
+
+classify:
+  min_area: 12          # 小于此面积的区域当噪声丢掉
+  # 1.0 == 良品最极端的那个像素，所以超过它的量就是"超出良品多少"
+  extent_base: 1.0
+  # 面积证据的门限（该区域内超出 extent_base 的量 / 零件面积）。fit 时按样本外实测覆盖，
+  # 这里的 0 表示没标定时关闭这条判据
+  extent_cut: 0.0
+  # 关掉这条就回到只看峰值：少一次停线，代价是漏掉面积大但反差弱的缺陷
+  extent_evidence: true
+  # 先把邻近证据连通成一块再量（污染是颗粒状的，单颗都不过线）；1 = 不合并
+  merge_px: 3
+  border_px: 2          # 完全落在画布最外圈 band 内的区域丢掉（抠图接缝）；只是贴边的大区域保留
+  # 规则名就是标签；source 要求该区域真的有这个检测器的信号，形状像不算
+  rules:
+    crack:
+      source: crack
+      min_elongation: 4.0
+      min_maxdim: 16
+    missing:
+      source: missing
+      near_boundary: 6
+    default: stain
+
+calibration:
+  pixel_percentile: 99.9
+  # 判决线取良品分布的这个分位数（不是最大值）。代价是显式的：约 (100-此值)% 的良品会越线，
+  # fit 会报出实际越线的张数。取 100 就退回"良品最大值定线"——数据越多越钝
+  reference_percentile: 99.0
+  # 探这个较松的值去量良品自己能产生多高的区域分数，再把真正的门限定在它之上
+  region_probe: 1.0
+  # 判决 margin 由交叉拟合实测：每折至少这么多训练图，否则估计本身就是噪声
+  calibration_folds: 2
+  min_images_per_fold: 4
+  # 折外门控用 k 次重拟合估计，代价是 k 倍 fit 时间。超过这个良品数就改用
+  # "部署模型 + 每张图把自己排除掉"的单遍估计（偏保守，但一遍就够）
+  max_fold_images: 60
+  image_margin: 1.15
+  min_good_per_view: 30

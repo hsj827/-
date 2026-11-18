@@ -1,0 +1,32 @@
+[project]
+name = "adkit"
+version = "0.1.0"
+description = "Good-only unsupervised defect detection: PatchCore / STEFANN plus classical CV crack detectors"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python-headless>=4.8",
+    "scipy>=1.11",
+    "scikit-image>=0.21",
+    "scikit-learn>=1.3",
+    "pyyaml>=6.0",
+    "click>=8.1",
+    "pillow>=10.0",
+    "torch>=2.1",
+    "torchvision>=0.16",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+]
+
+[project.scripts]
+adkit = "adkit.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adkit"]
+
+[dependency-groups]
+dev = ["pytest>=7.0"]
